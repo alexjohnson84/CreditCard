@@ -8,7 +8,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.cross_validation import train_test_split
-from sklearn.metrics import roc_curve
+from sklearn.metrics import roc_curve, recall_score, precision_score
 from sklearn.externals import joblib
 from matplotlib import pyplot as plt
 import seaborn as sns
@@ -30,6 +30,9 @@ class CreditCard(object):
         """
         Activate R to Pandas, import package from R and extract dataset.
         convert to pandas dataframe
+
+        Input: None
+        Output: CreditCard data read to dataframe in Object
         """
         pandas2ri.activate()
         aer = importr('AER')
@@ -37,6 +40,8 @@ class CreditCard(object):
         self.df = pandas2ri.ri2py(credcard['CreditCard'])
     def _binarize_cat_strings(self, cols):
         """
+        Input: list of (yes/no) columns
+        Output:
         Convert columns that are setup as 'yes'/'no' into 1 for yes, 2 for no
         """
         for col in cols:
@@ -49,6 +54,9 @@ class CreditCard(object):
         Generate violin and histogram plots used in EDA
         violin plots are normalized and converted from wide to long form to
         show distr diffs between cards.
+
+        Input:  Desired plots
+        Output: generated graphs to graph folder
         """
         if violin == True:
             cols = ['reports', 'share', 'expenditure',
@@ -62,31 +70,47 @@ class CreditCard(object):
             df_melt = pd.melt(df_norm[cols], id_vars='card')
             sns.violinplot(x='variable', y='value', hue='card',
                             data=df_melt, split=True, width=0.8)
+            plt.title('Distribution of Variables to Application Approval')
             plt.savefig('graphs/violin.png')
         if hist != False:
             for column in hist:
+                plt.title('Distribution for %s by Approval Status' % (column))
                 self.df.hist(column=column, by='card')
                 plt.savefig('graphs/%s_hist.png' % (column))
+                plt.clf()
 
     def test_models(self, model_dict):
         """
         Run models established, and return score to STOUT, and generate ROC
         curve for the model
+
+        Input: Dictionary of model names and untrained models
+        Output: ROC graph across models and score/Precision/Recall scores to
+        STOUT
         """
         X_train, X_test, y_train, y_test = \
-            train_test_split(self.X, self.y, test_size=0.3)
+            train_test_split(self.X, self.y, test_size=0.3, random_state=42)
 
         for mod_name, model in model_dict.iteritems():
             model.fit(X_train, y_train)
             mod_score = model.score(X_test, y_test)
             print "average score for %s is %s" % (mod_name,
-                                                    round(mod_score,3)
+                                                    round(mod_score,2)
                                                   )
-            fpr, trp, _ = roc_curve(y_test.values, model.predict(X_test))
-            plt.plot(fpr, trp, label=mod_name)
-        plt.legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.)
-        plt.xlabel('False Positive Rate')
-        plt.ylabel('True Positive Rate (1-Recall)')
+            y_pred = model.predict(X_test)
+            recall = recall_score(y_test, y_pred)
+            precision = precision_score(y_test, y_pred)
+            print "%s has a recall of %s and precision of %s" \
+                    % (mod_name, round(precision, 4), round(recall, 4))
+            fpr, tpr, _ = roc_curve(y_test.values, model.predict(X_test))
+            plt.plot(fpr, tpr, label=mod_name)
+        legend = plt.legend(frameon = 1)
+        frame = legend.get_frame()
+        frame.set_facecolor('white')
+        frame.set_edgecolor('black')
+        plt.title('ROC Curve For Across Models')
+        plt.xlabel('False Positive Rate (1-Recall)')
+        plt.ylabel('True Positive Rate')
         plt.plot([0,1],[0,1], ls="--", color='black')
         plt.savefig('graphs/roc_curves.png')
 
@@ -115,12 +139,10 @@ class CreditCard(object):
 if __name__ == '__main__':
     cc = CreditCard()
     cc.gen_eda_plots()
-
     model_tests = {
                 'rfc': RandomForestClassifier(),
                 'knn': KNeighborsClassifier(),
                 'logit': LogisticRegression()
                 }
-
     cc.test_models(model_tests)
     cc.final_train_and_persist(LogisticRegression())
