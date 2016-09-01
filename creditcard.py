@@ -91,6 +91,13 @@ class CreditCard(object):
         X_train, X_test, y_train, y_test = \
             train_test_split(self.X, self.y, test_size=0.3, random_state=42)
 
+        self.min_max_scaler = preprocessing.MinMaxScaler()
+        self.min_max_scaler.fit(X_train)
+        X_train = pd.DataFrame(self.min_max_scaler.transform(X_train))
+        X_test = pd.DataFrame(self.min_max_scaler.transform(X_test))
+        X_train.columns = self.X.columns
+        X_test.columns = self.X.columns
+
         for mod_name, model in model_dict.iteritems():
             model.fit(X_train, y_train)
             mod_score = model.score(X_test, y_test)
@@ -124,16 +131,18 @@ class CreditCard(object):
                 default)
         """
         self.model = model
-        self.model.fit(self.X,self.y)
+        scaled_X = self.min_max_scaler.transform(self.X)
+        self.model.fit(scaled_X,self.y)
         joblib.dump(self.model, 'model.pkl', compress=1)
         if plot == True:
+            plt.clf()
             ypos = np.arange(len(self.X.columns))
-            plt.barh(ypos, self.model.coef_[0])
+            plt.barh(ypos, self.model.feature_importances_)
             plt.yticks(ypos, self.X.columns)
             plt.grid(b=None)
-            plt.title('Coefficients of Logistic Regression')
+            plt.title('Feature Importance Random Forest')
             plt.ylabel('Features')
-            plt.xlabel('Coefficients')
+            plt.xlabel('Importance')
             plt.savefig('graphs/Coefficients_model.png')
 
 if __name__ == '__main__':
@@ -145,4 +154,4 @@ if __name__ == '__main__':
                 'logit': LogisticRegression()
                 }
     cc.test_models(model_tests)
-    cc.final_train_and_persist(LogisticRegression())
+    cc.final_train_and_persist(RandomForestClassifier())
